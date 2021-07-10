@@ -1007,19 +1007,28 @@ void IslandWindow::SetGlobalHotkeys(const std::vector<winrt::Microsoft::Terminal
     int index = 0;
     for (const auto& hotkey : hotkeyList)
     {
-        const auto modifiers = hotkey.Modifiers();
-        const auto hotkeyFlags = MOD_NOREPEAT |
-                                 (WI_IsFlagSet(modifiers, KeyModifiers::Windows) ? MOD_WIN : 0) |
-                                 (WI_IsFlagSet(modifiers, KeyModifiers::Alt) ? MOD_ALT : 0) |
-                                 (WI_IsFlagSet(modifiers, KeyModifiers::Ctrl) ? MOD_CONTROL : 0) |
-                                 (WI_IsFlagSet(modifiers, KeyModifiers::Shift) ? MOD_SHIFT : 0);
+        auto vkey = hotkey.Vkey();
+        if (!vkey)
+        {
+            vkey = MapVirtualKeyW(hotkey.ScanCode(), MAPVK_VSC_TO_VK);
+        }
+        if (!vkey)
+        {
+            continue;
+        }
+
+        auto hotkeyFlags = MOD_NOREPEAT;
+        {
+            const auto modifiers = hotkey.Modifiers();
+            WI_SetFlagIf(hotkeyFlags, MOD_WIN, WI_IsFlagSet(modifiers, KeyModifiers::Windows));
+            WI_SetFlagIf(hotkeyFlags, MOD_ALT, WI_IsFlagSet(modifiers, KeyModifiers::Alt));
+            WI_SetFlagIf(hotkeyFlags, MOD_CONTROL, WI_IsFlagSet(modifiers, KeyModifiers::Ctrl));
+            WI_SetFlagIf(hotkeyFlags, MOD_SHIFT, WI_IsFlagSet(modifiers, KeyModifiers::Shift));
+        }
 
         // TODO GH#8888: We should display a warning of some kind if this fails.
         // This can fail if something else already bound this hotkey.
-        LOG_IF_WIN32_BOOL_FALSE(RegisterHotKey(_window.get(),
-                                               index,
-                                               hotkeyFlags,
-                                               hotkey.Vkey()));
+        LOG_IF_WIN32_BOOL_FALSE(RegisterHotKey(_window.get(), index, hotkeyFlags, vkey));
 
         index++;
     }

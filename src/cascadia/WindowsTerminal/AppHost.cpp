@@ -669,8 +669,7 @@ void AppHost::_listenForInboundConnections()
 winrt::fire_and_forget AppHost::_setupGlobalHotkeys()
 {
     // The hotkey MUST be registered on the main thread. It will fail otherwise!
-    co_await winrt::resume_foreground(_logic.GetRoot().Dispatcher(),
-                                      winrt::Windows::UI::Core::CoreDispatcherPriority::Normal);
+    co_await winrt::resume_foreground(_logic.GetRoot().Dispatcher());
 
     // Remove all the already registered hotkeys before setting up the new ones.
     _window->UnsetHotkeys(_hotkeys);
