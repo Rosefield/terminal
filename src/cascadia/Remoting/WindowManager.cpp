@@ -319,6 +319,8 @@ namespace winrt::Microsoft::Terminal::Remoting::implementation
             }
         }
 
+        _peasant.GetWindowLayoutRequested({ get_weak(), &WindowManager::_GetWindowLayoutRequestedHandlers });
+
         TraceLoggingWrite(g_hRemotingProvider,
                           "WindowManager_CreateOurPeasant",
                           TraceLoggingUInt64(_peasant.GetID(), "peasantID", "The ID of our new peasant"),
@@ -591,4 +593,12 @@ namespace winrt::Microsoft::Terminal::Remoting::implementation
         return false;
     }
 
+    Windows::Foundation::Collections::IVector<winrt::hstring> WindowManager::GetAllWindowLayouts()
+    {
+        if (_monarch)
+        {
+            return _monarch.GetAllWindowLayouts();
+        }
+        return nullptr;
+    }
 }
