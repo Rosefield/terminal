@@ -57,6 +57,7 @@ namespace winrt::Microsoft::Terminal::Remoting::implementation
 
         void SummonAllWindows();
         Windows::Foundation::Collections::IMapView<uint64_t, winrt::hstring> GetPeasantNames();
+        Windows::Foundation::Collections::IVector<winrt::hstring> GetAllWindowLayouts();
 
         TYPED_EVENT(FindTargetWindowRequested, winrt::Windows::Foundation::IInspectable, winrt::Microsoft::Terminal::Remoting::FindTargetWindowArgs);
         TYPED_EVENT(ShowTrayIconRequested, winrt::Windows::Foundation::IInspectable, winrt::Windows::Foundation::IInspectable);
