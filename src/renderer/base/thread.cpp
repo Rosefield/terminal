@@ -4,9 +4,12 @@
 #include "precomp.h"
 
 #include "thread.hpp"
+#include <chrono>
+#include "til/benchmarking.h"
 
 #pragma hdrstop
 
+using namespace std::chrono_literals;
 using namespace Microsoft::Console::Render;
 
 RenderThread::RenderThread() :
@@ -57,6 +60,7 @@ RenderThread::~RenderThread()
 //      work on.
 // Arguments:
 // - pRendererParent: the IRenderer that owns this thread, and which we should
+        auto start = std::chrono::steady_clock::now();
 //      trigger frames for.
 // Return Value:
 // - S_OK if we succeeded, else an HRESULT corresponding to a failure to create
@@ -169,9 +173,13 @@ DWORD WINAPI RenderThread::_ThreadProc()
     while (_fKeepRunning)
     {
         WaitForSingleObject(_hPaintEnabledEvent, INFINITE);
+        
+        //auto wholeTimer = til::ScopeTimerLogName("ThreadProc frame time");
+
 
         if (!_fNextFrameRequested.exchange(false, std::memory_order_acq_rel))
         {
+            //auto frameRequestedTimer = til::ScopeTimerLogName("ThreadProc nextFrameRequested");
             // <--
             // If `NotifyPaint` is called at this point, then it will not
             // set the event because `_fWaiting` is not `true` yet so we have
@@ -209,15 +217,21 @@ DWORD WINAPI RenderThread::_ThreadProc()
 
         ResetEvent(_hPaintCompletedEvent);
 
-        _pRenderer->WaitUntilCanRender();
-        LOG_IF_FAILED(_pRenderer->PaintFrame());
+        {
+            //auto waitTimer = til::ScopeTimerLogName("ThreadProc waitUntilCanRender");
+            _pRenderer->WaitUntilCanRender();
+        }
+        {
+            auto paintTimer = til::ScopeTimerLogName("ThreadProc PaintFrame");
+            LOG_IF_FAILED(_pRenderer->PaintFrame());
+        }
+
 
         SetEvent(_hPaintCompletedEvent);
-
         // extra check before we sleep since it's a "long" activity, relatively speaking.
         if (_fKeepRunning)
         {
-            Sleep(s_FrameLimitMilliseconds);
+            //Sleep(s_FrameLimitMilliseconds);
         }
     }
 
