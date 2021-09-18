@@ -573,7 +573,6 @@ namespace winrt::TerminalApp::implementation
         auto p = _rootPane;
         p->WalkTree([](auto pane) {
             pane->_PaneDetachedHandlers(pane);
-            return false;
         });
 
         // Clean up references and close the tab
@@ -601,13 +600,9 @@ namespace winrt::TerminalApp::implementation
             if (p->_IsLeaf())
             {
                 p->Id(_nextPaneId);
+                _AttachEventHandlersToControl(p->Id().value(), p->_control);
                 _nextPaneId++;
             }
-            if (auto control = p->GetTerminalControl())
-            {
-                _AttachEventHandlersToControl(p->Id().value(), control);
-            }
-            return false;
         });
 
         // pass the old id to the new child
