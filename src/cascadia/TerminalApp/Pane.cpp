@@ -2096,7 +2096,7 @@ void Pane::_SetupEntranceAnimation()
 // - splitType: The direction we're attempting to split in.
 // - availableSpace: The theoretical space that's available for this pane to be able to split.
 // Return Value:
-// - nullopt if the target is not found, or if there is not enough spaec to fit.
+// - nullopt if the target is not found, or if there is not enough space to fit.
 //   Otherwise will return the "real split direction" (converting automatic splits),
 //   and will return either the split direction or nullopt.
 std::optional<std::optional<SplitDirection>> Pane::PreCalculateCanSplit(const std::shared_ptr<Pane> target,

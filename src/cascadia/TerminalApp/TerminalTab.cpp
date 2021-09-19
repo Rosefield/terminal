@@ -1469,12 +1469,12 @@ namespace winrt::TerminalApp::implementation
     // - splitType: what direction to split.
     // - splitSize: how big the new split should be.
     // - availableSpace: how much space there is to work with.
-    // Return value: 
+    // Return value:
     // - This will return nullopt if a split of the given size/direction was not possible,
     //   or it will return the split direction with automatic converted to a cardinal direction.
     std::optional<SplitDirection> TerminalTab::PreCalculateCanSplit(SplitDirection splitType,
-                                           const float splitSize,
-                                           winrt::Windows::Foundation::Size availableSpace) const
+                                                                    const float splitSize,
+                                                                    winrt::Windows::Foundation::Size availableSpace) const
     {
         return _rootPane->PreCalculateCanSplit(_activePane, splitType, splitSize, availableSpace).value_or(std::nullopt);
     }
