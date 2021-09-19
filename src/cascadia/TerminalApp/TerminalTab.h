@@ -48,8 +48,7 @@ namespace winrt::TerminalApp::implementation
         winrt::fire_and_forget ActivateBellIndicatorTimer();
 
         float CalcSnappedDimension(const bool widthOrHeight, const float dimension) const;
-        winrt::Microsoft::Terminal::Settings::Model::SplitDirection PreCalculateAutoSplit(winrt::Windows::Foundation::Size rootSize) const;
-        bool PreCalculateCanSplit(winrt::Microsoft::Terminal::Settings::Model::SplitDirection splitType,
+        std::optional<winrt::Microsoft::Terminal::Settings::Model::SplitDirection> PreCalculateCanSplit(winrt::Microsoft::Terminal::Settings::Model::SplitDirection splitType,
                                   const float splitSize,
                                   winrt::Windows::Foundation::Size availableSpace) const;
 

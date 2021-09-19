@@ -1513,14 +1513,10 @@ namespace winrt::TerminalApp::implementation
             const float contentHeight = ::base::saturated_cast<float>(_tabContent.ActualHeight());
             const winrt::Windows::Foundation::Size availableSpace{ contentWidth, contentHeight };
 
-            auto realSplitType = splitDirection;
-            if (realSplitType == SplitDirection::Automatic)
-            {
-                realSplitType = tab.PreCalculateAutoSplit(availableSpace);
-            }
-
-            const auto canSplit = tab.PreCalculateCanSplit(realSplitType, splitSize, availableSpace);
-            if (!canSplit)
+            // PreCalculateCanSplit will convert automatic splits to the appropriate direction
+            // and if there is space to split will return the split direction to use.
+            const auto realSplitType = tab.PreCalculateCanSplit(splitDirection, splitSize, availableSpace);
+            if (!realSplitType)
             {
                 return;
             }
@@ -1536,7 +1532,7 @@ namespace winrt::TerminalApp::implementation
             }
 
             _UnZoomIfNeeded();
-            tab.SplitPane(realSplitType, splitSize, newPane);
+            tab.SplitPane(realSplitType.value(), splitSize, newPane);
 
             // After GH#6586, the control will no longer focus itself
             // automatically when it's finished being laid out. Manually focus
@@ -1619,7 +1615,8 @@ namespace winrt::TerminalApp::implementation
     // - Creates a new pane with the same profile and settings as the currently
     //   focused pane on the given tab.
     // - Currently this does not support duplicating multiple panes.
-    std::shared_ptr<Pane> TerminalPage::_DuplicateActivePane(const TerminalTab& tab) {
+    std::shared_ptr<Pane> TerminalPage::_DuplicateActivePane(const TerminalTab& tab)
+    {
         // For now we just duplicate a leaf pane, but hypothetically in the
         // future this could duplicate multiple panes.
         auto profile = tab.GetFocusedProfile();
