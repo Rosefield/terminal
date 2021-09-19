@@ -56,16 +56,13 @@ namespace winrt::TerminalApp::implementation
     // - newTerminalArgs: An object that may contain a blob of parameters to
     //   control which profile is created and with possible other
     //   configurations. See TerminalSettings::CreateWithNewTerminalArgs for more details.
-    // - existingConnection: An optional connection that is already established to a PTY
-    //   for this tab to host instead of creating one.
-    //   If not defined, the tab will create the connection.
-    HRESULT TerminalPage::_OpenNewTab(const NewTerminalArgs& newTerminalArgs, winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection)
+    HRESULT TerminalPage::_OpenNewTab(const NewTerminalArgs& newTerminalArgs)
     try
     {
         const auto profile{ _settings.GetProfileForArgs(newTerminalArgs) };
         const auto settings{ TerminalSettings::CreateWithNewTerminalArgs(_settings, newTerminalArgs, *_bindings) };
 
-        _CreateNewTabWithProfileAndSettings(profile, settings, existingConnection);
+        _CreateNewTabWithProfileAndSettings(profile, settings);
 
         const uint32_t tabCount = _tabs.Size();
         const bool usedManualProfile = (newTerminalArgs != nullptr) &&
@@ -235,10 +232,11 @@ namespace winrt::TerminalApp::implementation
     // - Create a new tab using a specified pane as the root.
     // Arguments:
     // - pane: The pane to use as the root.
-    void TerminalPage::_CreateNewTabFromPane(std::shared_ptr<Pane> pane)
+    winrt::com_ptr<TerminalTab> TerminalPage::_CreateNewTabFromPane(std::shared_ptr<Pane> pane)
     {
         auto newTabImpl = winrt::make_self<TerminalTab>(pane);
         _InitializeTab(newTabImpl);
+        return newTabImpl;
     }
 
     // Method Description:
@@ -250,46 +248,11 @@ namespace winrt::TerminalApp::implementation
     // - existingConnection: optionally receives a connection from the outside world instead of attempting to create one
     void TerminalPage::_CreateNewTabWithProfileAndSettings(const Profile& profile, const TerminalSettingsCreateResult& settings, TerminalConnection::ITerminalConnection existingConnection)
     {
-        // Initialize the new tab
-        // Create a connection based on the values in our settings object if we weren't given one.
-        auto connection = existingConnection ? existingConnection : _CreateConnectionFromSettings(profile, settings.DefaultSettings());
-
-        // If we had an `existingConnection`, then this is an inbound handoff from somewhere else.
-        // We need to tell it about our size information so it can match the dimensions of what
-        // we are about to present.
-        if (existingConnection)
+        const auto [newPane, debugPane] = _CreatePaneWithDebugPane(profile, settings, existingConnection);
+        auto newTabImpl = _CreateNewTabFromPane(newPane);
+        if (debugPane)
         {
-            connection.Resize(settings.DefaultSettings().InitialRows(), settings.DefaultSettings().InitialCols());
-        }
-
-        TerminalConnection::ITerminalConnection debugConnection{ nullptr };
-        if (_settings.GlobalSettings().DebugFeaturesEnabled())
-        {
-            const CoreWindow window = CoreWindow::GetForCurrentThread();
-            const auto rAltState = window.GetKeyState(VirtualKey::RightMenu);
-            const auto lAltState = window.GetKeyState(VirtualKey::LeftMenu);
-            const bool bothAltsPressed = WI_IsFlagSet(lAltState, CoreVirtualKeyStates::Down) &&
-                                         WI_IsFlagSet(rAltState, CoreVirtualKeyStates::Down);
-            if (bothAltsPressed)
-            {
-                std::tie(connection, debugConnection) = OpenDebugTapConnection(connection);
-            }
-        }
-
-        // Give term control a child of the settings so that any overrides go in the child
-        // This way, when we do a settings reload we just update the parent and the overrides remain
-        auto term = _InitControl(settings, connection);
-
-        auto newTabImpl = winrt::make_self<TerminalTab>(profile, term);
-        _RegisterTerminalEvents(term);
-        _InitializeTab(newTabImpl);
-
-        if (debugConnection) // this will only be set if global debugging is on and tap is active
-        {
-            auto newControl = _InitControl(settings, debugConnection);
-            _RegisterTerminalEvents(newControl);
-            // Split (auto) with the debug tap.
-            newTabImpl->SplitPane(SplitDirection::Automatic, 0.5f, profile, newControl);
+            newTabImpl->SplitPane(SplitDirection::Automatic, 0.5f, debugPane);
         }
     }
 
@@ -362,20 +325,9 @@ namespace winrt::TerminalApp::implementation
             // In the future, it may be preferable to just duplicate the
             // current control's live settings (which will include changes
             // made through VT).
-
-            if (auto profile = tab.GetFocusedProfile())
+            if (const auto pane = _DuplicateActivePane(tab))
             {
-                // TODO GH#5047 If we cache the NewTerminalArgs, we no longer need to do this.
-                profile = GetClosestProfileForDuplicationOfProfile(profile);
-                const auto settingsCreateResult{ TerminalSettings::CreateWithProfile(_settings, profile, *_bindings) };
-                const auto workingDirectory = tab.GetActiveTerminalControl().WorkingDirectory();
-                const auto validWorkingDirectory = !workingDirectory.empty();
-                if (validWorkingDirectory)
-                {
-                    settingsCreateResult.DefaultSettings().StartingDirectory(workingDirectory);
-                }
-
-                _CreateNewTabWithProfileAndSettings(profile, settingsCreateResult);
+                _CreateNewTabFromPane(pane);
 
                 const auto runtimeTabText{ tab.GetTabText() };
                 if (!runtimeTabText.empty())

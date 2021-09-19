@@ -200,10 +200,13 @@ namespace winrt::TerminalApp::implementation
 
         void _CreateNewTabFlyout();
         void _OpenNewTabDropdown();
-        HRESULT _OpenNewTab(const Microsoft::Terminal::Settings::Model::NewTerminalArgs& newTerminalArgs, winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr);
-        void _CreateNewTabFromPane(std::shared_ptr<Pane> pane);
+        HRESULT _OpenNewTab(const Microsoft::Terminal::Settings::Model::NewTerminalArgs& newTerminalArgs);
+        winrt::com_ptr<TerminalTab> _CreateNewTabFromPane(std::shared_ptr<Pane> pane);
         void _CreateNewTabWithProfileAndSettings(const Microsoft::Terminal::Settings::Model::Profile& profile, const Microsoft::Terminal::Settings::Model::TerminalSettingsCreateResult& settings, winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr);
         winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection _CreateConnectionFromSettings(Microsoft::Terminal::Settings::Model::Profile profile, Microsoft::Terminal::Settings::Model::TerminalSettings settings);
+        std::shared_ptr<Pane> _CreatePaneFromSettings(const Microsoft::Terminal::Settings::Model::Profile& profile, const Microsoft::Terminal::Settings::Model::TerminalSettingsCreateResult& settings, winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr);
+        std::shared_ptr<Pane> _CreatePaneFromNewTerminalArgs(const Microsoft::Terminal::Settings::Model::NewTerminalArgs& newTerminalArgs);
+        std::pair<std::shared_ptr<Pane>, std::shared_ptr<Pane>> _CreatePaneWithDebugPane(const Microsoft::Terminal::Settings::Model::Profile& profile, const Microsoft::Terminal::Settings::Model::TerminalSettingsCreateResult& settings, winrt::Microsoft::Terminal::TerminalConnection::ITerminalConnection existingConnection = nullptr);
 
         winrt::fire_and_forget _OpenNewWindow(const bool elevate, const Microsoft::Terminal::Settings::Model::NewTerminalArgs newTerminalArgs);
 
@@ -231,6 +234,7 @@ namespace winrt::TerminalApp::implementation
 
         void _DuplicateFocusedTab();
         void _DuplicateTab(const TerminalTab& tab);
+        std::shared_ptr<Pane> _DuplicateActivePane(const TerminalTab& tab);
 
         void _SplitTab(TerminalTab& tab);
         winrt::fire_and_forget _ExportTab(const TerminalTab& tab);

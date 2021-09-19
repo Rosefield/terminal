@@ -1386,35 +1386,6 @@ void Pane::UpdateSettings(const TerminalSettingsCreateResult& settings, const Pr
 }
 
 // Method Description:
-// - Attempts to add the provided pane as a split of the current pane.
-// Arguments:
-// - pane: the new pane to add
-// - splitType: How the pane should be attached
-// Return Value:
-// - the new reference to the child created from the current pane.
-std::shared_ptr<Pane> Pane::AttachPane(std::shared_ptr<Pane> pane, SplitDirection splitType)
-{
-    // Splice the new pane into the tree
-    const auto [first, _] = _Split(splitType, .5, pane);
-
-    // If the new pane has a child that was the focus, re-focus it
-    // to steal focus from the currently focused pane.
-    if (pane->_HasFocusedChild())
-    {
-        pane->WalkTree([](auto p) {
-            if (p->_lastActive)
-            {
-                p->_Focus();
-                return true;
-            }
-            return false;
-        });
-    }
-
-    return first;
-}
-
-// Method Description:
 // - Attempts to find the parent of the target pane,
 //   if found remove the pane from the tree and return it.
 // - If the removed pane was (or contained the focus) the first sibling will
@@ -2206,25 +2177,13 @@ std::optional<bool> Pane::PreCalculateCanSplit(const std::shared_ptr<Pane> targe
 // - The two newly created Panes, with the original pane first
 std::pair<std::shared_ptr<Pane>, std::shared_ptr<Pane>> Pane::Split(SplitDirection splitType,
                                                                     const float splitSize,
-                                                                    const Profile& profile,
-                                                                    const TermControl& control)
+                                                                    std::shared_ptr<Pane> newPane)
 {
-    if (!_lastActive)
+    if (const auto focus = _FindPane([](auto p) { return p->_lastActive; }))
     {
-        if (_firstChild && _firstChild->_HasFocusedChild())
-        {
-            return _firstChild->Split(splitType, splitSize, profile, control);
-        }
-        else if (_secondChild && _secondChild->_HasFocusedChild())
-        {
-            return _secondChild->Split(splitType, splitSize, profile, control);
-        }
-
-        return { nullptr, nullptr };
+        return focus->_Split(splitType, splitSize, newPane);
     }
-
-    auto newPane = std::make_shared<Pane>(profile, control);
-    return _Split(splitType, splitSize, newPane);
+    return { nullptr, nullptr };
 }
 
 // Method Description:

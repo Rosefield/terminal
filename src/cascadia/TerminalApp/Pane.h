@@ -108,8 +108,7 @@ public:
 
     std::pair<std::shared_ptr<Pane>, std::shared_ptr<Pane>> Split(winrt::Microsoft::Terminal::Settings::Model::SplitDirection splitType,
                                                                   const float splitSize,
-                                                                  const winrt::Microsoft::Terminal::Settings::Model::Profile& profile,
-                                                                  const winrt::Microsoft::Terminal::Control::TermControl& control);
+                                                                  std::shared_ptr<Pane> newPane);
     bool ToggleSplitOrientation();
     float CalcSnappedDimension(const bool widthOrHeight, const float dimension) const;
     std::optional<winrt::Microsoft::Terminal::Settings::Model::SplitDirection> PreCalculateAutoSplit(const std::shared_ptr<Pane> target,
@@ -121,8 +120,6 @@ public:
     void Shutdown();
     void Close();
 
-    std::shared_ptr<Pane> AttachPane(std::shared_ptr<Pane> pane,
-                                     winrt::Microsoft::Terminal::Settings::Model::SplitDirection splitType);
     std::shared_ptr<Pane> DetachPane(std::shared_ptr<Pane> pane);
 
     int GetLeafPaneCount() const noexcept;

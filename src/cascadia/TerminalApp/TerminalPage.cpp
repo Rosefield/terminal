@@ -1451,7 +1451,7 @@ namespace winrt::TerminalApp::implementation
                 return false;
             }
             auto pane = focusedTab->DetachPane();
-            targetTab->AttachPane(pane);
+            targetTab->SplitPane(SplitDirection::Automatic, 0.5f, pane);
             _SetFocusedTab(*targetTab);
         }
         else
@@ -1508,45 +1508,7 @@ namespace winrt::TerminalApp::implementation
     {
         try
         {
-            TerminalSettingsCreateResult controlSettings{ nullptr };
-            Profile profile{ nullptr };
-
-            if (splitMode == SplitType::Duplicate)
-            {
-                profile = tab.GetFocusedProfile();
-                if (profile)
-                {
-                    // TODO GH#5047 If we cache the NewTerminalArgs, we no longer need to do this.
-                    profile = GetClosestProfileForDuplicationOfProfile(profile);
-                    controlSettings = TerminalSettings::CreateWithProfile(_settings, profile, *_bindings);
-                    const auto workingDirectory = tab.GetActiveTerminalControl().WorkingDirectory();
-                    const auto validWorkingDirectory = !workingDirectory.empty();
-                    if (validWorkingDirectory)
-                    {
-                        controlSettings.DefaultSettings().StartingDirectory(workingDirectory);
-                    }
-                }
-                // TODO: GH#5047 - In the future, we should get the Profile of
-                // the focused pane, and use that to build a new instance of the
-                // settings so we can duplicate this tab/pane.
-                //
-                // Currently, if the profile doesn't exist anymore in our
-                // settings, we'll silently do nothing.
-                //
-                // In the future, it will be preferable to just duplicate the
-                // current control's settings, but we can't do that currently,
-                // because we won't be able to create a new instance of the
-                // connection without keeping an instance of the original Profile
-                // object around.
-            }
-            if (!profile)
-            {
-                profile = _settings.GetProfileForArgs(newTerminalArgs);
-                controlSettings = TerminalSettings::CreateWithNewTerminalArgs(_settings, newTerminalArgs, *_bindings);
-            }
-
-            const auto controlConnection = _CreateConnectionFromSettings(profile, controlSettings.DefaultSettings());
-
+            // First test if we can split at all
             const float contentWidth = ::base::saturated_cast<float>(_tabContent.ActualWidth());
             const float contentHeight = ::base::saturated_cast<float>(_tabContent.ActualHeight());
             const winrt::Windows::Foundation::Size availableSpace{ contentWidth, contentHeight };
@@ -1563,14 +1525,18 @@ namespace winrt::TerminalApp::implementation
                 return;
             }
 
-            auto newControl = _InitControl(controlSettings, controlConnection);
-
-            // Hookup our event handlers to the new terminal
-            _RegisterTerminalEvents(newControl);
+            std::shared_ptr<Pane> newPane = nullptr;
+            if (splitMode == SplitType::Duplicate)
+            {
+                newPane = _DuplicateActivePane(tab);
+            }
+            if (!newPane)
+            {
+                newPane = _CreatePaneFromNewTerminalArgs(newTerminalArgs);
+            }
 
             _UnZoomIfNeeded();
-
-            tab.SplitPane(realSplitType, splitSize, profile, newControl);
+            tab.SplitPane(realSplitType, splitSize, newPane);
 
             // After GH#6586, the control will no longer focus itself
             // automatically when it's finished being laid out. Manually focus
@@ -1581,6 +1547,111 @@ namespace winrt::TerminalApp::implementation
             }
         }
         CATCH_LOG();
+    }
+
+    // Method Description
+    // - Creates a new pane from a profile and terminal settings
+    // - Registers the terminal events with the page
+    std::shared_ptr<Pane> TerminalPage::_CreatePaneFromSettings(const Profile& profile, const TerminalSettingsCreateResult& settings, ITerminalConnection existingConnection)
+    {
+        const auto controlConnection = existingConnection ? existingConnection : _CreateConnectionFromSettings(profile, settings.DefaultSettings());
+        auto control = _InitControl(settings, controlConnection);
+
+        // Hookup our event handlers to the new terminal
+        _RegisterTerminalEvents(control);
+
+        return std::make_shared<Pane>(profile, control);
+    }
+
+    // Method Description
+    // - Creates a new pane from a NewTerminalArgs
+    // - Registers the terminal events with the page
+    std::shared_ptr<Pane> TerminalPage::_CreatePaneFromNewTerminalArgs(const NewTerminalArgs& newTerminalArgs)
+    {
+        const auto profile = _settings.GetProfileForArgs(newTerminalArgs);
+        const auto controlSettings = TerminalSettings::CreateWithNewTerminalArgs(_settings, newTerminalArgs, *_bindings);
+        return _CreatePaneFromSettings(profile, controlSettings);
+    }
+
+    // Method Description
+    // - Creates (potentially) two panes from the given settings and connection.
+    //   If debug tab is requested a second pane will be created.
+    // - Registers each terminals' events with the page
+    std::pair<std::shared_ptr<Pane>, std::shared_ptr<Pane>> TerminalPage::_CreatePaneWithDebugPane(const Profile& profile, const TerminalSettingsCreateResult& settings, ITerminalConnection existingConnection)
+    {
+        // Initialize the new tab
+        // Create a connection based on the values in our settings object if we weren't given one.
+        auto connection = existingConnection ? existingConnection : _CreateConnectionFromSettings(profile, settings.DefaultSettings());
+
+        // If we had an `existingConnection`, then this is an inbound handoff from somewhere else.
+        // We need to tell it about our size information so it can match the dimensions of what
+        // we are about to present.
+        if (existingConnection)
+        {
+            connection.Resize(settings.DefaultSettings().InitialRows(), settings.DefaultSettings().InitialCols());
+        }
+
+        TerminalConnection::ITerminalConnection debugConnection{ nullptr };
+        if (_settings.GlobalSettings().DebugFeaturesEnabled())
+        {
+            const CoreWindow window = CoreWindow::GetForCurrentThread();
+            const auto rAltState = window.GetKeyState(VirtualKey::RightMenu);
+            const auto lAltState = window.GetKeyState(VirtualKey::LeftMenu);
+            const bool bothAltsPressed = WI_IsFlagSet(lAltState, CoreVirtualKeyStates::Down) &&
+                                         WI_IsFlagSet(rAltState, CoreVirtualKeyStates::Down);
+            if (bothAltsPressed)
+            {
+                std::tie(connection, debugConnection) = OpenDebugTapConnection(connection);
+            }
+        }
+
+        auto newPane = _CreatePaneFromSettings(profile, settings, connection);
+
+        if (debugConnection) // this will only be set if global debugging is on and tap is active
+        {
+            auto debugPane = _CreatePaneFromSettings(profile, settings, debugConnection);
+            return { newPane, debugPane };
+        }
+        return { newPane, nullptr };
+    }
+
+    // Method Description
+    // - Creates a new pane with the same profile and settings as the currently
+    //   focused pane on the given tab.
+    // - Currently this does not support duplicating multiple panes.
+    std::shared_ptr<Pane> TerminalPage::_DuplicateActivePane(const TerminalTab& tab) {
+        // For now we just duplicate a leaf pane, but hypothetically in the
+        // future this could duplicate multiple panes.
+        auto profile = tab.GetFocusedProfile();
+        if (profile)
+        {
+            // TODO GH#5047 If we cache the NewTerminalArgs, we no longer need to do this.
+            profile = GetClosestProfileForDuplicationOfProfile(profile);
+            auto controlSettings = TerminalSettings::CreateWithProfile(_settings, profile, *_bindings);
+            const auto workingDirectory = tab.GetActiveTerminalControl().WorkingDirectory();
+            const auto validWorkingDirectory = !workingDirectory.empty();
+            if (validWorkingDirectory)
+            {
+                controlSettings.DefaultSettings().StartingDirectory(workingDirectory);
+            }
+            if (profile)
+            {
+                return _CreatePaneFromSettings(profile, controlSettings);
+            }
+        }
+        // TODO: GH#5047 - In the future, we should get the Profile of
+        // the focused pane, and use that to build a new instance of the
+        // settings so we can duplicate this tab/pane.
+        //
+        // Currently, if the profile doesn't exist anymore in our
+        // settings, we'll silently do nothing.
+        //
+        // In the future, it will be preferable to just duplicate the
+        // current control's settings, but we can't do that currently,
+        // because we won't be able to create a new instance of the
+        // connection without keeping an instance of the original Profile
+        // object around.
+        return nullptr;
     }
 
     // Method Description:

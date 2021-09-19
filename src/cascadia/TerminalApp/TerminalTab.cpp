@@ -25,22 +25,15 @@ namespace winrt
 
 namespace winrt::TerminalApp::implementation
 {
-    TerminalTab::TerminalTab(const Profile& profile, const TermControl& control)
-    {
-        _rootPane = std::make_shared<Pane>(profile, control, true);
-
-        _rootPane->Id(_nextPaneId);
-        _activePane = _rootPane;
-        _mruPanes.insert(_mruPanes.begin(), _nextPaneId);
-        ++_nextPaneId;
-
-        _Setup();
-    }
-
     TerminalTab::TerminalTab(std::shared_ptr<Pane> rootPane)
     {
         _rootPane = rootPane;
         _activePane = nullptr;
+
+        if (_rootPane->_IsLeaf())
+        {
+            _rootPane->SetActive();
+        }
 
         auto firstId = _nextPaneId;
 
@@ -489,46 +482,59 @@ namespace winrt::TerminalApp::implementation
     }
 
     // Method Description:
-    // - Split the focused pane in our tree of panes, and place the
-    //   given TermControl into the newly created pane.
+    // - Split the focused pane in our tree of panes, and add the given pane.
     // Arguments:
     // - splitType: The type of split we want to create.
-    // - profile: The profile GUID to associate with the newly created pane.
-    // - control: A TermControl to use in the new pane.
+    // - splitSize: How big the split should be.
+    // - pane: The new pane to add to the split.
     // Return Value:
     // - <none>
     void TerminalTab::SplitPane(SplitDirection splitType,
                                 const float splitSize,
-                                const Profile& profile,
-                                TermControl& control)
+                                std::shared_ptr<Pane> pane)
     {
+        // Add the new event handlers to the new pane(s)
+        // and update their ids.
+        pane->WalkTree([&](auto p) {
+            _AttachEventHandlersToPane(p);
+            if (p->_IsLeaf())
+            {
+                p->Id(_nextPaneId);
+                _AttachEventHandlersToControl(p->Id().value(), p->_control);
+                _nextPaneId++;
+            }
+        });
         // Make sure to take the ID before calling Split() - Split() will clear out the active pane's ID
         const auto activePaneId = _activePane->Id();
         // Depending on which direction will be split, the new pane can be
         // either the first or second child, but this will always return the
         // original pane first.
-        auto [original, newPane] = _activePane->Split(splitType, splitSize, profile, control);
+        auto [original, newPane] = _activePane->Split(splitType, splitSize, pane);
         // The active pane has an id if it is a leaf
         if (activePaneId)
         {
             original->Id(activePaneId.value());
         }
-        newPane->Id(_nextPaneId);
-        ++_nextPaneId;
-
         _activePane = original;
-
-        // Add a event handlers to the new panes' GotFocus event. When the pane
-        // gains focus, we'll mark it as the new active pane.
-        _AttachEventHandlersToControl(newPane->Id().value(), control);
         _AttachEventHandlersToPane(original);
-        _AttachEventHandlersToPane(newPane);
 
         // Immediately update our tracker of the focused pane now. If we're
         // splitting panes during startup (from a commandline), then it's
         // possible that the focus events won't propagate immediately. Updating
         // the focus here will give the same effect though.
-        _UpdateActivePane(newPane);
+        const auto hasFocus = newPane->WalkTree([&](auto p) {
+            if (p->_lastActive)
+            {
+                _UpdateActivePane(p);
+                return true;
+            }
+            return false;
+        });
+        // If there wasn't an active pane in the tree, just make the root of the subtree the new focus
+        if (!hasFocus)
+        {
+            _UpdateActivePane(newPane);
+        }
     }
 
     // Method Description:
@@ -582,55 +588,6 @@ namespace winrt::TerminalApp::implementation
         _ClosedHandlers(nullptr, nullptr);
 
         return p;
-    }
-
-    // Method Description:
-    // - Add an arbitrary pane to this tab. This will be added as a split on the
-    //   currently active pane.
-    // Arguments:
-    // - pane: The pane to add.
-    // Return Value:
-    // - <none>
-    void TerminalTab::AttachPane(std::shared_ptr<Pane> pane)
-    {
-        // Add the new event handlers to the new pane(s)
-        // and update their ids.
-        pane->WalkTree([&](auto p) {
-            _AttachEventHandlersToPane(p);
-            if (p->_IsLeaf())
-            {
-                p->Id(_nextPaneId);
-                _AttachEventHandlersToControl(p->Id().value(), p->_control);
-                _nextPaneId++;
-            }
-        });
-
-        // pass the old id to the new child
-        const auto previousId = _activePane->Id();
-
-        // Add the new pane as an automatic split on the active pane.
-        auto first = _activePane->AttachPane(pane, SplitDirection::Automatic);
-
-        // This will be true if the original _activePane is a leaf pane.
-        // If it is a parent pane then we don't want to set an ID on it.
-        if (previousId)
-        {
-            first->Id(previousId.value());
-        }
-
-        // Update with event handlers on the new child.
-        _activePane = first;
-        _AttachEventHandlersToPane(first);
-
-        // Make sure that we have the right pane set as the active pane
-        pane->WalkTree([&](auto p) {
-            if (p->_lastActive)
-            {
-                _UpdateActivePane(p);
-                return true;
-            }
-            return false;
-        });
     }
 
     // Method Description:
