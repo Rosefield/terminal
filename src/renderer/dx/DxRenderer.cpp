@@ -537,7 +537,7 @@ try
 // You can find out how to install it here:
 // https://docs.microsoft.com/en-us/windows/uwp/gaming/use-the-directx-runtime-and-visual-studio-graphics-diagnostic-features
                               // clang-format on
-                              // D3D11_CREATE_DEVICE_DEBUG |
+                              D3D11_CREATE_DEVICE_DEBUG |
                               D3D11_CREATE_DEVICE_SINGLETHREADED;
 
     const std::array<D3D_FEATURE_LEVEL, 5> FeatureLevels{ D3D_FEATURE_LEVEL_11_1,
@@ -1317,6 +1317,17 @@ try
             _dxgiSurface.Reset();
             _d2dDeviceContext->SetTarget(nullptr);
             _d2dBitmap.Reset();
+            if (_HasTerminalEffects())
+            {
+                _renderTargetView.Reset();
+                _vertexShader.Reset();
+                _pixelShader.Reset();
+                _vertexLayout.Reset();
+                _screenQuadVertexBuffer.Reset();
+                _pixelShaderSettingsBuffer.Reset();
+                _samplerState.Reset();
+                _framebufferCapture.Reset();
+            }
 
             // Change the buffer size and recreate the render target (and surface)
             RETURN_IF_FAILED(_dxgiSwapChain->ResizeBuffers(2, clientSize.width<UINT>(), clientSize.height<UINT>(), _swapChainDesc.Format, _swapChainDesc.Flags));
@@ -1327,6 +1338,11 @@ try
 
             // And persist the new size.
             _displaySizePixels = clientSize;
+
+            if (_HasTerminalEffects())
+            {
+                _SetupTerminalEffects();
+            }
         }
 
         if (const auto size = clientSize / glyphCellSize; size != _invalidMap.size())
@@ -1524,11 +1540,24 @@ void DxEngine::WaitUntilCanRender() noexcept
     {
         if (_HasTerminalEffects() && _pixelShaderLoaded)
         {
-            const HRESULT hr2 = _PaintTerminalEffects();
-            if (FAILED(hr2))
+            for (auto i = 0; i < 2; i += 1)
             {
-                _pixelShaderLoaded = false;
-                LOG_HR_MSG(hr2, "Failed to paint terminal effects. Disabling.");
+                const HRESULT hr2 = _PaintTerminalEffects();
+                if (FAILED(hr2))
+                {
+                    // Retry creating the effects once
+                    if (i == 0)
+                    {
+                        _SetupTerminalEffects();
+                    }
+                    else
+                    {
+                        _pixelShaderLoaded = false;
+                    }
+                    LOG_HR_MSG(hr2, "Failed to paint terminal effects. Disabling.");
+                    continue;
+                }
+                break;
             }
         }
 

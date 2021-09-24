@@ -403,6 +403,11 @@ namespace winrt::TerminalApp::implementation
     void TerminalPage::_HandleToggleShaderEffects(const IInspectable& /*sender*/,
                                                   const ActionEventArgs& args)
     {
+        // TODO: GH#11327 The shader effects don't take place until you the next frame.
+        // However, controls will not update themselves unless they ave
+        // an update, but if you do for whatever reason DxRenderer sometimes just fails
+        // to apply the terminal effects if it is updated on more than one
+        // control at a a time.  Just disabling that behavior for now.
         const auto res = _ApplyToActiveControls([](auto& control) {
             control.ToggleShaderEffects();
         });

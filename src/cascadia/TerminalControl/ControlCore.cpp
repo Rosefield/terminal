@@ -483,8 +483,9 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         {
             _renderEngine->ToggleShaderEffects();
         }
-        // Always redraw after toggling effects. This way even if the control
-        // does not have focus it will update immediately.
+        // We want to always trigger a redraw on changing the shader effects so
+        // that terminals, even if they don't have focus currently, will
+        // immediately update to show the effects.
         _renderer->TriggerRedrawAll();
     }
 
